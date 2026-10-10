@@ -101,7 +101,6 @@ function getSslModeFromUrl(url: URL, protocol: string): string | undefined {
   const mode = (
     getParam("sslmode") ?? getParam("ssl-mode") ?? getParam("ssl_mode")
   )?.trim().toLowerCase();
-  if (!mode) return undefined;
 
   if (protocol === "mysql" || protocol === "mariadb") {
     const mysqlModes: Record<string, string> = {
@@ -112,7 +111,24 @@ function getSslModeFromUrl(url: URL, protocol: string): string | undefined {
       "verify-full": "verify_identity", "verify-identity": "verify_identity",
       verify_identity: "verify_identity",
     };
-    return mysqlModes[mode];
+    // An explicit sslMode always wins over deprecated Connector/J booleans.
+    // Do not allow useSSL=false to weaken an explicit verification mode.
+    if (mode) return mysqlModes[mode];
+
+    const useSsl = getParam("useSSL")?.trim().toLowerCase();
+    if (useSsl === "false") return "disabled";
+    if (useSsl === "true") {
+      // Connector/J translates the legacy flags in this order:
+      // verifyServerCertificate > requireSSL > useSSL alone.
+      if (getParam("verifyServerCertificate")?.trim().toLowerCase() === "true") {
+        return "verify_ca";
+      }
+      if (getParam("requireSSL")?.trim().toLowerCase() === "true") {
+        return "required";
+      }
+      return "preferred";
+    }
+    return undefined;
   }
   if (protocol === "postgres" || protocol === "postgresql") {
     const pgModes: Record<string, string> = {
@@ -120,7 +136,13 @@ function getSslModeFromUrl(url: URL, protocol: string): string | undefined {
       require: "require", "verify-ca": "verify-ca",
       "verify-full": "verify-full",
     };
-    return pgModes[mode];
+    if (mode) return pgModes[mode];
+
+    // pgJDBC treats ssl=true (or a bare ssl flag) as verify-full.
+    // ssl=false falls back to its default "prefer", not "disable".
+    const ssl = getParam("ssl")?.trim().toLowerCase();
+    if (ssl === "true" || ssl === "") return "verify-full";
+    if (ssl === "false") return "prefer";
   }
   return undefined;
 }
