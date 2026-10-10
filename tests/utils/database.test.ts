@@ -96,6 +96,20 @@ describe('getTableDataChangeScope', () => {
     });
   });
 
+  it('uses Redis logical DB 3 for execution, not the first connection database', () => {
+    const redisCapabilities = { ...baseCapabilities, schemas: false };
+    expect(getTableDataChangeScope(redisCapabilities, '3', '0')).toEqual({
+      database: '3',
+    });
+  });
+
+  it('keeps PostgreSQL query execution scoped by schema, not database', () => {
+    const postgresCapabilities = { ...baseCapabilities, schemas: true };
+    expect(getTableDataChangeScope(postgresCapabilities, 'sales', 'public')).toEqual({
+      schema: 'sales',
+    });
+  });
+
   it('omits scope for flat drivers', () => {
     expect(
       getTableDataChangeScope(
