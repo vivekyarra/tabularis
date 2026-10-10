@@ -115,15 +115,15 @@ function getSslModeFromUrl(url: URL, protocol: string): string | undefined {
     // Do not allow useSSL=false to weaken an explicit verification mode.
     if (mode) return mysqlModes[mode];
 
-    const useSsl = getParam("useSSL")?.trim().toLowerCase();
+    const useSsl = getParam("usessl")?.trim().toLowerCase();
     if (useSsl === "false") return "disabled";
     if (useSsl === "true") {
       // Connector/J translates the legacy flags in this order:
       // verifyServerCertificate > requireSSL > useSSL alone.
-      if (getParam("verifyServerCertificate")?.trim().toLowerCase() === "true") {
+      if (getParam("verifyservercertificate")?.trim().toLowerCase() === "true") {
         return "verify_ca";
       }
-      if (getParam("requireSSL")?.trim().toLowerCase() === "true") {
+      if (getParam("requiressl")?.trim().toLowerCase() === "true") {
         return "required";
       }
       return "preferred";
