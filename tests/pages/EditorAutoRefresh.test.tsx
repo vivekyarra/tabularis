@@ -14,7 +14,7 @@ const mocks = vi.hoisted(() => ({
   noop: vi.fn(),
   location: { state: null, pathname: "/editor", key: "test" },
   settings: { resultPageSize: 100, csvIncludeHeaders: true },
-  capabilities: { schemas: true, sql_dialect: "postgresql", identifier_quote: '"' },
+  capabilities: { schemas: true, file_based: false, folder_based: false, sql_dialect: "postgresql", identifier_quote: '"' },
   t: (key: string, options?: Record<string, unknown>) => key === "toolbar.autoRefresh.failed" ? String(options?.error) : key,
   notify: vi.fn().mockResolvedValue(undefined),
 }));
@@ -119,6 +119,7 @@ const queries = () => vi.mocked(invoke).mock.calls.filter(([command]) => command
 describe("table auto-refresh integration", () => {
   beforeEach(() => {
     vi.useFakeTimers(); vi.setSystemTime(0); mocks.connectionId = "connection-1"; mocks.notify.mockClear();
+    mocks.capabilities.schemas = true;
     vi.mocked(invoke).mockReset();
     vi.mocked(invoke).mockImplementation((command) => command === "execute_query"
       ? Promise.resolve({ ...initialResult, rows: [[2], [3]] }) : Promise.resolve([]));
@@ -141,6 +142,23 @@ describe("table auto-refresh integration", () => {
     expect(screen.getByTestId("grid")).toBe(grid);
     expect(grid.scrollTop).toBe(120); expect(grid.scrollLeft).toBe(80);
     expect(context.activeTab).toMatchObject({ page: 2, pageSize: 50, filterClause: "id > 0", sortClause: "id DESC", limitClause: 200, pkColumns: ["id"] });
+  });
+
+  it("routes Redis multi-database table refresh to the tab's selected logical database (#752)", async () => {
+    // A plugin with MySQL-like multi-database capabilities, but no schema support.
+    mocks.capabilities.schemas = false;
+    render(<Harness initialTabs={[{ ...initialTab(), schema: "3" }]} />);
+    await advance(5000);
+
+    expect(queries()).toHaveLength(1);
+    expect(queries()[0][1]).toMatchObject({
+      connectionId: "connection-1",
+      sessionId: "table-1",
+      database: "3",
+      page: 2,
+    });
+    // The query command should receive a database override, not a SQL schema.
+    expect(queries()[0][1]).not.toHaveProperty("schema");
   });
 
   it("retains rows on failure, shows an inline error and retries after one interval", async () => {

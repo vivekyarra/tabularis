@@ -4504,6 +4504,42 @@ fn emit_database_dropped<R: Runtime>(app: &AppHandle<R>, connection_id: &str, da
     );
 }
 
+/// Select the database explicitly chosen in the editor without changing saved
+/// connection parameters. Plugin drivers (notably Redis) receive this resolved
+/// single database via their JSON-RPC ConnectionParams.
+fn apply_query_database_override(params: &mut ConnectionParams, database: Option<String>) {
+    if let Some(db) = database.filter(|db| !db.trim().is_empty()) {
+        params.database = crate::models::DatabaseSelection::Single(db);
+    }
+}
+
+#[cfg(test)]
+mod query_database_override_tests {
+    use super::{apply_query_database_override, ConnectionParams};
+    use crate::models::DatabaseSelection;
+
+    #[test]
+    fn explicit_database_replaces_multi_selection_for_plugin_queries() {
+        let mut params = ConnectionParams {
+            database: DatabaseSelection::Multiple(vec!["0".into(), "3".into()]),
+            ..Default::default()
+        };
+        apply_query_database_override(&mut params, Some("3".into()));
+        assert_eq!(params.database.as_vec(), vec!["3".to_string()]);
+    }
+
+    #[test]
+    fn absent_or_blank_scope_does_not_replace_saved_selection() {
+        let mut params = ConnectionParams {
+            database: DatabaseSelection::Single("0".into()),
+            ..Default::default()
+        };
+        apply_query_database_override(&mut params, None);
+        apply_query_database_override(&mut params, Some("  ".into()));
+        assert_eq!(params.database.primary(), "0");
+    }
+}
+
 #[tauri::command]
 pub async fn execute_query<R: Runtime>(
     app: AppHandle<R>,
@@ -4513,6 +4549,7 @@ pub async fn execute_query<R: Runtime>(
     limit: Option<u32>,
     page: Option<u32>,
     schema: Option<String>,
+    database: Option<String>,
     session_id: Option<String>,
 ) -> Result<QueryResult, String> {
     log::info!(
@@ -4526,7 +4563,8 @@ pub async fn execute_query<R: Runtime>(
     let saved_conn = find_connection_by_id(&app, &connection_id)?;
     let expanded_params = expand_ssh_connection_params(&app, &saved_conn.params).await?;
     let expanded_params = expand_k8s_connection_params(&app, &expanded_params).await?;
-    let params = resolve_connection_params_with_id(&expanded_params, &connection_id)?;
+    let mut params = resolve_connection_params_with_id(&expanded_params, &connection_id)?;
+    apply_query_database_override(&mut params, database);
 
     // Detected before the spawn, which takes ownership of `sanitized_query`.
     // Cheap: only allocates when the statement really is a DROP DATABASE.
@@ -4776,6 +4814,7 @@ pub async fn execute_query_batch<R: Runtime>(
     limit: Option<u32>,
     page: Option<u32>,
     schema: Option<String>,
+    database: Option<String>,
     batch_id: Option<String>,
     session_id: Option<String>,
 ) -> Result<Vec<BatchStatementResult>, String> {
@@ -4798,7 +4837,8 @@ pub async fn execute_query_batch<R: Runtime>(
     let saved_conn = find_connection_by_id(&app, &connection_id)?;
     let expanded_params = expand_ssh_connection_params(&app, &saved_conn.params).await?;
     let expanded_params = expand_k8s_connection_params(&app, &expanded_params).await?;
-    let params = resolve_connection_params_with_id(&expanded_params, &connection_id)?;
+    let mut params = resolve_connection_params_with_id(&expanded_params, &connection_id)?;
+    apply_query_database_override(&mut params, database);
 
     let drv = driver_for_params(&params).await?;
 
@@ -4993,12 +5033,14 @@ pub async fn count_query<R: Runtime>(
     connection_id: String,
     query: String,
     schema: Option<String>,
+    database: Option<String>,
     session_id: Option<String>,
 ) -> Result<u64, String> {
     let saved_conn = find_connection_by_id(&app, &connection_id)?;
     let expanded_params = expand_ssh_connection_params(&app, &saved_conn.params).await?;
     let expanded_params = expand_k8s_connection_params(&app, &expanded_params).await?;
-    let params = resolve_connection_params_with_id(&expanded_params, &connection_id)?;
+    let mut params = resolve_connection_params_with_id(&expanded_params, &connection_id)?;
+    apply_query_database_override(&mut params, database);
 
     let sanitized = query.trim().trim_end_matches(';').to_string();
 

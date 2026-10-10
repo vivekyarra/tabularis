@@ -1329,7 +1329,7 @@ export const Editor = ({ commandScopeId }: EditorProps) => {
             // the changes, a verifying SELECT, COMMIT. Without the session the
             // run would land on a different pooled connection each time.
             sessionId: targetTabId,
-            ...(schema ? { schema } : {}),
+            ...getTableDataChangeScope(activeCapabilities, schema, activeSchema),
           });
           const end = performance.now();
           const latestTab = tabsRef.current.find((tab) => tab.id === targetTabId);
@@ -1703,7 +1703,7 @@ export const Editor = ({ commandScopeId }: EditorProps) => {
             // The tab is the session: a transaction it leaves open keeps
             // this tab's connection so the next run continues it.
             sessionId: targetTabId,
-            ...(schema ? { schema } : {}),
+            ...getTableDataChangeScope(activeCapabilities, schema, activeSchema),
           },
         );
       } catch (err) {
@@ -1797,6 +1797,7 @@ export const Editor = ({ commandScopeId }: EditorProps) => {
       settings.notifyLongQueries,
       settings.notifyLongQueriesThresholdSec,
       activeSchema,
+      activeCapabilities,
       t,
       isMultiDb,
       activeDatabaseName,
@@ -1897,7 +1898,7 @@ export const Editor = ({ commandScopeId }: EditorProps) => {
           // Paging within the tab has to read through the tab's own
           // transaction, or it shows pre-transaction rows.
           sessionId: targetTabId,
-          ...(schema ? { schema } : {}),
+          ...getTableDataChangeScope(activeCapabilities, schema, activeSchema),
         });
         const end = performance.now();
 
@@ -1940,7 +1941,7 @@ export const Editor = ({ commandScopeId }: EditorProps) => {
         }
       }
     },
-    [activeConnectionId, updateTab, settings.resultPageSize, activeSchema, t],
+    [activeConnectionId, updateTab, settings.resultPageSize, activeSchema, activeCapabilities, t],
   );
 
   const handlePageSizeChange = useCallback(
@@ -2004,7 +2005,7 @@ export const Editor = ({ commandScopeId }: EditorProps) => {
           const total = await invoke<number>("count_query", {
             connectionId: tab.connectionId,
             query: countTarget,
-            schema: tab.schema ?? activeSchema,
+            ...getTableDataChangeScope(activeCapabilities, tab.schema ?? activeSchema, activeSchema),
             // Inside a transaction, count what the tab sees, uncommitted rows included.
             sessionId: transactionTabIdsRef.current.has(tab.id) ? tab.id : undefined,
           });
@@ -2125,7 +2126,7 @@ export const Editor = ({ commandScopeId }: EditorProps) => {
         page: 1,
         // Copying every row must see what the tab's own transaction sees.
         sessionId,
-        ...(schema ? { schema } : {}),
+        ...getTableDataChangeScope(activeCapabilities, schema, activeSchema),
       });
       const text = formatRowsForCopy(res.rows, res.columns ?? columns, copyFormat, {
         withHeaders: true,
@@ -2135,7 +2136,7 @@ export const Editor = ({ commandScopeId }: EditorProps) => {
       });
       return { text, count: res.rows.length };
     },
-    [activeConnectionId, copyFormat, csvDelimiter, csvIncludeHeaders],
+    [activeConnectionId, activeSchema, activeCapabilities, copyFormat, csvDelimiter, csvIncludeHeaders],
   );
 
   // Schema resolution mirrors runQuery so the full fetch targets the same
