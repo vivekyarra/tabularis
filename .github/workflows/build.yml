@@ -222,6 +222,11 @@ jobs:
           echo "${{ secrets.APPLE_API_KEY_CONTENT }}" | base64 --decode > "$RUNNER_TEMP/apple_api_key.p8"
           echo "APPLE_API_KEY_PATH=$RUNNER_TEMP/apple_api_key.p8" >> "$GITHUB_ENV"
 
+      # Exercise the release gate with both 0755 and the bad 0770 mode.
+      - name: Test AppImage permission gate (Linux)
+        if: matrix.platform == 'ubuntu-24.04'
+        run: bash scripts/test-appimage-permissions.sh
+
       # Preview builds are never served through latest.json, so the updater
       # bundles + .sig files would only be noise; and `createUpdaterArtifacts`
       # makes `tauri build` demand the updater key, which fork PRs don't have.
