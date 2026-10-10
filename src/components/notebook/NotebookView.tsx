@@ -1,6 +1,7 @@
 import { useState, useCallback, useRef, useEffect, useMemo } from "react";
 import { flushSync } from "react-dom";
 import { useTranslation } from "react-i18next";
+import { getQueryDatabaseScope } from "../../utils/database";
 import { invoke } from "@tauri-apps/api/core";
 import { save, open } from "@tauri-apps/plugin-dialog";
 import { writeTextFile, readTextFile } from "@tauri-apps/plugin-fs";
@@ -412,6 +413,7 @@ export function NotebookView({
           limit: pageSize,
           page: 1,
           ...(cellSchema ? { schema: cellSchema } : {}),
+          ...getQueryDatabaseScope(activeCapabilities, cellSchema, effectiveSchema),
         });
         const elapsed = performance.now() - start;
 
@@ -454,6 +456,7 @@ export function NotebookView({
     [
       connectionId,
       effectiveSchema,
+      activeCapabilities,
       settings.resultPageSize,
       updateCell,
       params,
