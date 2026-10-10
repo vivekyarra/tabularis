@@ -4,6 +4,7 @@ import {
   usesMultiDatabaseLayout,
   isMultiDatabaseSelection,
   getTableDataChangeScope,
+  getQueryDatabaseScope,
   getDatabaseList,
   getEffectiveDatabase,
   reconcileDatabaseSelection,
@@ -66,6 +67,26 @@ describe('usesMultiDatabaseLayout', () => {
 
   it('returns false for undefined capabilities', () => {
     expect(isMultiDatabaseCapable(undefined)).toBe(false);
+  });
+});
+
+
+describe('getQueryDatabaseScope', () => {
+  it('uses the selected Redis logical database instead of the connection default', () => {
+    const redisCapabilities = { ...baseCapabilities, identifier_quote: '"' };
+    expect(getQueryDatabaseScope(redisCapabilities, '3', '0')).toEqual({ database: '3' });
+    expect(getQueryDatabaseScope(redisCapabilities, '0', '9')).toEqual({ database: '0' });
+  });
+
+  it('falls back to the active database for unspecialized console tabs', () => {
+    expect(getQueryDatabaseScope(baseCapabilities, null, '9')).toEqual({ database: '9' });
+    expect(getQueryDatabaseScope(baseCapabilities, null, null)).toEqual({});
+  });
+
+  it('never interprets a PostgreSQL schema or SQLite file as a database override', () => {
+    expect(getQueryDatabaseScope({ ...baseCapabilities, schemas: true }, 'public', null)).toEqual({});
+    expect(getQueryDatabaseScope({ ...baseCapabilities, file_based: true }, 'main', null)).toEqual({});
+    expect(getQueryDatabaseScope(undefined, 'public', null)).toEqual({});
   });
 });
 
