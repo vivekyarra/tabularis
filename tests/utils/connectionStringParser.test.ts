@@ -481,6 +481,54 @@ describe("connectionStringParser", () => {
       expect(pg.success && pg.params.ssl_mode).toBe("verify-full");
     });
 
+    it("maps pgJDBC ssl=true to hostname verification without weakening explicit sslmode", () => {
+      const examples: Array<[string, string | undefined]> = [
+        ["ssl=true", "verify-full"],
+        ["SSL=TRUE", "verify-full"],
+        ["ssl=", "verify-full"],
+        ["ssl=false", "prefer"],
+        ["sslmode=require&ssl=true", "require"],
+        ["sslmode=verify-full&ssl=false", "verify-full"],
+        ["sslmode=bogus&ssl=true", undefined],
+        ["ssl=invalid", undefined],
+      ];
+      for (const [query, expected] of examples) {
+        const parsed = parseConnectionString(
+          `jdbc:postgresql://host/app?${query}`,
+          CAPABILITY_DRIVERS,
+        );
+        expect(parsed.success && parsed.params.ssl_mode).toBe(expected);
+      }
+    });
+
+    it("maps deprecated Connector/J useSSL flags with explicit sslMode precedence", () => {
+      const examples: Array<[string, string | undefined]> = [
+        ["useSSL=false", "disabled"],
+        ["UseSSL=FALSE", "disabled"],
+        ["useSSL=true", "preferred"],
+        ["useSSL=true&requireSSL=true", "required"],
+        ["useSSL=true&verifyServerCertificate=true", "verify_ca"],
+        ["useSSL=true&requireSSL=true&verifyServerCertificate=true", "verify_ca"],
+        ["useSSL=false&requireSSL=true", "disabled"],
+        ["useSSL=invalid", undefined],
+        ["sslMode=VERIFY_IDENTITY&useSSL=false", "verify_identity"],
+        ["sslMode=DISABLED&useSSL=true", "disabled"],
+        ["sslMode=not-a-mode&useSSL=true", undefined],
+      ];
+      for (const [query, expected] of examples) {
+        const parsed = parseConnectionString(
+          `jdbc:mysql://host/app?${query}`,
+          CAPABILITY_DRIVERS,
+        );
+        expect(parsed.success && parsed.params.ssl_mode).toBe(expected);
+      }
+      const mariadb = parseConnectionString(
+        "jdbc:mariadb://host/app?useSSL=true&requireSSL=true",
+        CAPABILITY_DRIVERS,
+      );
+      expect(mariadb.success && mariadb.params.ssl_mode).toBe("required");
+    });
+
     it("recognizes only supported JDBC URLs, preserving opaque JDBC plugin URLs", () => {
       expect(looksLikeConnectionString(
         "jdbc:postgresql://host/app",
