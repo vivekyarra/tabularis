@@ -4513,6 +4513,7 @@ pub async fn execute_query<R: Runtime>(
     limit: Option<u32>,
     page: Option<u32>,
     schema: Option<String>,
+    database: Option<String>,
     session_id: Option<String>,
 ) -> Result<QueryResult, String> {
     log::info!(
@@ -4526,7 +4527,12 @@ pub async fn execute_query<R: Runtime>(
     let saved_conn = find_connection_by_id(&app, &connection_id)?;
     let expanded_params = expand_ssh_connection_params(&app, &saved_conn.params).await?;
     let expanded_params = expand_k8s_connection_params(&app, &expanded_params).await?;
-    let params = resolve_connection_params_with_id(&expanded_params, &connection_id)?;
+    let mut params = resolve_connection_params_with_id(&expanded_params, &connection_id)?;
+    // The selected logical database must reach the driver (including plugins).
+    // Omission preserves the saved connection's existing database selection.
+    if let Some(db) = database.filter(|value| !value.trim().is_empty()) {
+        params.database = crate::models::DatabaseSelection::Single(db);
+    }
 
     // Detected before the spawn, which takes ownership of `sanitized_query`.
     // Cheap: only allocates when the statement really is a DROP DATABASE.
@@ -4776,6 +4782,7 @@ pub async fn execute_query_batch<R: Runtime>(
     limit: Option<u32>,
     page: Option<u32>,
     schema: Option<String>,
+    database: Option<String>,
     batch_id: Option<String>,
     session_id: Option<String>,
 ) -> Result<Vec<BatchStatementResult>, String> {
@@ -4798,7 +4805,12 @@ pub async fn execute_query_batch<R: Runtime>(
     let saved_conn = find_connection_by_id(&app, &connection_id)?;
     let expanded_params = expand_ssh_connection_params(&app, &saved_conn.params).await?;
     let expanded_params = expand_k8s_connection_params(&app, &expanded_params).await?;
-    let params = resolve_connection_params_with_id(&expanded_params, &connection_id)?;
+    let mut params = resolve_connection_params_with_id(&expanded_params, &connection_id)?;
+    // The selected logical database must reach the driver (including plugins).
+    // Omission preserves the saved connection's existing database selection.
+    if let Some(db) = database.filter(|value| !value.trim().is_empty()) {
+        params.database = crate::models::DatabaseSelection::Single(db);
+    }
 
     let drv = driver_for_params(&params).await?;
 
@@ -4993,12 +5005,18 @@ pub async fn count_query<R: Runtime>(
     connection_id: String,
     query: String,
     schema: Option<String>,
+    database: Option<String>,
     session_id: Option<String>,
 ) -> Result<u64, String> {
     let saved_conn = find_connection_by_id(&app, &connection_id)?;
     let expanded_params = expand_ssh_connection_params(&app, &saved_conn.params).await?;
     let expanded_params = expand_k8s_connection_params(&app, &expanded_params).await?;
-    let params = resolve_connection_params_with_id(&expanded_params, &connection_id)?;
+    let mut params = resolve_connection_params_with_id(&expanded_params, &connection_id)?;
+    // The selected logical database must reach the driver (including plugins).
+    // Omission preserves the saved connection's existing database selection.
+    if let Some(db) = database.filter(|value| !value.trim().is_empty()) {
+        params.database = crate::models::DatabaseSelection::Single(db);
+    }
 
     let sanitized = query.trim().trim_end_matches(';').to_string();
 
