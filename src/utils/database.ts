@@ -21,6 +21,22 @@ export function isMultiDatabaseCapable(capabilities: DriverCapabilities | null |
   );
 }
 
+
+/**
+ * The selected database is distinct from a SQL schema: plugins such as Redis
+ * need their selected logical DB in ConnectionParams.database, not the schema
+ * argument used by PostgreSQL. A tab's scope wins over the active sidebar.
+ */
+export function getQueryDatabaseScope(
+  capabilities: DriverCapabilities | null | undefined,
+  tabSchema: string | null | undefined,
+  activeSchema: string | null | undefined,
+): Pick<TableDataChangeScope, "database"> {
+  if (!isMultiDatabaseCapable(capabilities)) return {};
+  const database = tabSchema ?? activeSchema;
+  return database ? { database } : {};
+}
+
 export function getTableDataChangeScope(
   capabilities: DriverCapabilities | null | undefined,
   tabSchema: string | null | undefined,
