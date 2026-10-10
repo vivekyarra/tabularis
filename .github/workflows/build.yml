@@ -246,6 +246,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_BUNDLER_NEW_APPIMAGE_FORMAT: ${{ inputs.experimental_appimage && 'true' || '' }}
+          # The safe-umask wrapper chooses the correct CLI for stable vs experimental images.
+          TAURI_EXPERIMENTAL_APPIMAGE: ${{ inputs.experimental_appimage }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_KEY_PASSWORD }}
           # macOS code signing (Developer ID Application certificate)
@@ -267,7 +269,7 @@ jobs:
           releaseDraft: ${{ inputs.draft }}
           prerelease: ${{ inputs.prerelease }}
           # The experimental AppImage format needs the cargo-installed CLI override.
-          tauriScript: ${{ inputs.experimental_appimage && matrix.platform == 'ubuntu-24.04' && 'cargo tauri' || 'pnpm tauri' }}
+          tauriScript: ${{ matrix.platform == 'ubuntu-24.04' && './scripts/tauri-safe-umask.sh' || 'pnpm tauri' }}
           args: ${{ matrix.args }}
 
       - name: Build unsigned bundles (preview without secrets)
@@ -276,10 +278,22 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_BUNDLER_NEW_APPIMAGE_FORMAT: ${{ inputs.experimental_appimage && 'true' || '' }}
+          # The safe-umask wrapper chooses the correct CLI for stable vs experimental images.
+          TAURI_EXPERIMENTAL_APPIMAGE: ${{ inputs.experimental_appimage }}
         with:
           # No tagName: tauri-action only builds, it never touches releases.
-          tauriScript: ${{ inputs.experimental_appimage && matrix.platform == 'ubuntu-24.04' && 'cargo tauri' || 'pnpm tauri' }}
+          tauriScript: ${{ matrix.platform == 'ubuntu-24.04' && './scripts/tauri-safe-umask.sh' || 'pnpm tauri' }}
           args: ${{ matrix.args }}
+
+      # Keep broken stable AppImages out of releases. The audit runs after
+      # bundling, so it checks the packed squashfs rather than a temporary AppDir.
+      # It only reads the result; it must not mutate the signed .AppImage.
+      - name: Verify AppImage executable permissions (Linux)
+        if: matrix.platform == 'ubuntu-24.04'
+        shell: bash
+        env:
+          STABLE_APPIMAGE: ${{ !inputs.experimental_appimage }}
+        run: bash scripts/check-appimage-permissions.sh
 
       - name: Upload portable executable (Windows only)
         if: matrix.platform == 'windows-latest' && !inputs.preview
